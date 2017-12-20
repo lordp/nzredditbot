@@ -31,6 +31,24 @@ class RNZBotConfig(Config):
         "invercargill": None,
     }
 
+    flair_colours = {
+        "politics": "E9987B",
+        "advice": "e67367",
+        "news": "CB7BC0",
+        "discussion": "AB83E1",
+        "picture": "73b1db",
+        "sports": "60b8a7",
+        "meta": "4ccd82",
+        "travel": "f1d872",
+        "other": "c2c2cf",
+        "music": "2f2f2f",
+        "civildefence": "005A9C",
+        "ama": "0099CC",
+        "kiwiana": "78A22F",
+        "shitpost": "D4327C",
+    }
+
+    default_flair_colour = "c2c2cf"
 
 @Plugin.with_config(RNZBotConfig)
 class RNZBotPlugin(Plugin):
@@ -87,14 +105,13 @@ class RNZBotPlugin(Plugin):
         return next((item for item in self.config.channels if self.config.channels[item] is not None and
                      self.config.channels[item]["id"] == channel_id), None)
 
-    @staticmethod
-    def get_embed(info):
+    def get_embed(self, info):
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
             info["flair"], info["title"]
         ), width=256, placeholder="...")
         embed.url = "https://reddit.com{}".format(info["url"])
-        embed.color = 0x77dd77
+        embed.color = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
         embed.set_thumbnail(url=info["thumbnail"])
         embed.set_author(name=info["author"], url="https://reddit.com/u/{}".format(info["author"]))
         embed.timestamp = datetime.fromtimestamp(info["time"], timezone.utc).isoformat()
