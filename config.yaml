@@ -1,0 +1,9 @@
+token: 'TOKEN_GOES_HERE'
+
+bot:
+  commands_require_mention: false
+  commands_prefix: '+'
+  plugins:
+        - plugins.nzbot
+  levels:
+    owner_snowflake: owner
