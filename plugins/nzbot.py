@@ -106,12 +106,17 @@ class RNZBotPlugin(Plugin):
                      self.config.channels[item]["id"] == channel_id), None)
 
     def get_embed(self, info):
+        if info['flair'] is None or info['flair'].lower() not in self.config.flair_colours:
+            colour = int(self.config.default_flair_colour, 16)
+        else:
+            colour = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
+
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
             info["flair"], info["title"]
         ), width=256, placeholder="...")
         embed.url = "https://reddit.com{}".format(info["url"])
-        embed.color = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
+        embed.color = colour
         embed.set_thumbnail(url=info["thumbnail"])
         embed.set_author(name=info["author"], url="https://reddit.com/u/{}".format(info["author"]))
         embed.timestamp = datetime.fromtimestamp(info["time"], timezone.utc).isoformat()
