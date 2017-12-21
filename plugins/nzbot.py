@@ -6,7 +6,6 @@ from disco.bot.command import CommandLevels
 import json
 import textwrap
 from terminaltables import AsciiTable
-from pprint import pprint
 
 
 class RNZBotConfig(Config):
@@ -49,6 +48,7 @@ class RNZBotConfig(Config):
     }
 
     default_flair_colour = "c2c2cf"
+
 
 @Plugin.with_config(RNZBotConfig)
 class RNZBotPlugin(Plugin):
@@ -106,10 +106,7 @@ class RNZBotPlugin(Plugin):
                      self.config.channels[item]["id"] == channel_id), None)
 
     def get_embed(self, info):
-        if info['flair'] is None or info['flair'].lower() not in self.config.flair_colours:
-            colour = int(self.config.default_flair_colour, 16)
-        else:
-            colour = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
+        colour = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
 
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
@@ -184,7 +181,6 @@ class RNZBotPlugin(Plugin):
         channel.send_message(msg)
 
 
-
 class RNZBot:
     def __init__(self, subreddit):
         self.client = praw.Reddit("r-nz")
@@ -229,7 +225,7 @@ class RNZBot:
                     "title": submission.title,
                     "author": submission.author.name,
                     "time": submission.created_utc,
-                    "flair": submission.link_flair_text,
+                    "flair": submission.link_flair_text or "Other",
                     "url": submission.permalink,
                     "thumbnail": thumbnail,
                     "is_daily": self.is_daily(submission)
