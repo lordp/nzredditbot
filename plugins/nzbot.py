@@ -6,6 +6,31 @@ from disco.bot.command import CommandLevels
 import json
 import textwrap
 from terminaltables import AsciiTable
+from peewee import *
+
+db = SqliteDatabase("nzredditbot.db")
+db.connect()
+
+
+class Submission(Model):
+    STATE_INITIAL = 0
+    STATE_CHECKED = 1
+    STATE_POSTED = 2
+
+    subreddit = CharField()
+    thing = CharField()
+    title = CharField()
+    author = CharField()
+    time = DateTimeField()
+    flair = CharField()
+    url = CharField()
+    thumbnail = CharField()
+    is_daily = BooleanField()
+    message_id = BigIntegerField(null=True)
+    state = IntegerField(default=STATE_INITIAL)
+
+    class Meta:
+        database = db
 
 
 class RNZBotConfig(Config):
@@ -106,31 +131,41 @@ class RNZBotPlugin(Plugin):
                      self.config.channels[item]["id"] == channel_id), None)
 
     def get_embed(self, info):
-        colour = int(self.config.flair_colours.get(info['flair'].lower(), self.config.default_flair_colour), 16)
+        colour = int(self.config.flair_colours.get(info.flair.lower(), self.config.default_flair_colour), 16)
 
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
-            info["flair"], info["title"]
+            info.flair, info.title
         ), width=256, placeholder="...")
-        embed.url = "https://reddit.com{}".format(info["url"])
+        embed.url = "https://reddit.com{}".format(info.url)
         embed.color = colour
-        embed.set_thumbnail(url=info["thumbnail"])
-        embed.set_author(name=info["author"], url="https://reddit.com/u/{}".format(info["author"]))
-        embed.timestamp = datetime.fromtimestamp(info["time"], timezone.utc).isoformat()
+        embed.set_thumbnail(url=info.thumbnail)
+        embed.set_author(name=info.author, url="https://reddit.com/u/{}".format(info.author))
+        embed.timestamp = datetime.fromtimestamp(info.time, timezone.utc).isoformat()
 
         return embed
 
     def post_threads(self, subreddit, channel):
         if channel is not None:
             self.log.info("Checking submissions for {}".format(subreddit))
+            RNZBot(subreddit).get_submissions()
+            if self.config.channels[subreddit]['state'] == 0:
+                self.config.channels[subreddit]['state'] = 1
+            else:
+                self.log.info("Posting submissions for {} to discord".format(subreddit))
 
-            rnz = RNZBot(subreddit)
-            submissions = rnz.get_submissions()
-            for info in submissions:
-                if info["is_daily"]:
-                    self.current_daily = info
-                embed = self.get_embed(info)
-                channel.send_message(embed=embed)
+                self.config.channels[subreddit]['state'] = 0
+                submissions = Submission.select().where(
+                    Submission.state == Submission.STATE_CHECKED
+                ).order_by(Submission.time.desc()).limit(10)
+                for info in sorted(submissions, key=lambda item: item.time):
+                    if info.is_daily:
+                        self.current_daily = info
+                    embed = self.get_embed(info)
+                    msg = channel.send_message(embed=embed)
+                    Submission.update(
+                        message_id=msg.id, state=Submission.STATE_POSTED
+                    ).where(Submission.thing == info.thing).execute()
 
     @Plugin.command("assign", "[subreddit:str]", level=CommandLevels.TRUSTED)
     def cmd_assign(self, event, subreddit=None):
@@ -152,7 +187,7 @@ class RNZBotPlugin(Plugin):
 
             event.msg.reply("```{}```".format(table_instance.table))
         else:
-            self.config.channels[subreddit] = {"id": event.channel.id, "name": event.channel.name}
+            self.config.channels[subreddit] = {"id": event.channel.id, "name": event.channel.name, 'state': 0}
             event.msg.reply("Assigned /r/{} feed to this channel".format(subreddit))
             self.save_settings()
 
@@ -203,39 +238,45 @@ class RNZBot:
         with open("rnz-threads-{}.json".format(self.subreddit_name), "w") as outfile:
             json.dump(posted, outfile, indent=4)
 
-    def find(self, channel_id):
-        return next((True for item in self.posted if item["id"] == channel_id), False)
+    def find(self, thing):
+        return Submission.select().where(Submission.thing == thing).count() > 0
+        # return next((True for item in self.posted if item["id"] == thing), False)
 
     def get_submissions(self):
-        submissions = []
         missing_thumbnail = [
             "self", "default", ""
         ]
 
         subreddit = self.client.subreddit(self.subreddit_name)
         for submission in subreddit.new(limit=10):
-            if not self.find(submission.id):
-                if submission.thumbnail in missing_thumbnail:
-                    thumbnail = self.sub_thumbnail
-                else:
-                    thumbnail = submission.thumbnail
+            if submission.thumbnail in missing_thumbnail:
+                thumbnail = self.sub_thumbnail
+            else:
+                thumbnail = submission.thumbnail
 
-                submissions.append({
-                    "id": submission.id,
-                    "title": submission.title,
-                    "author": submission.author.name,
-                    "time": submission.created_utc,
-                    "flair": submission.link_flair_text or "Other",
-                    "url": submission.permalink,
-                    "thumbnail": thumbnail,
-                    "is_daily": self.is_daily(submission)
-                })
+            flair = "Other" if submission.link_flair_text is None else submission.link_flair_text
 
-        self.posted += submissions
-        self.save_posted()
+            try:
+                sub = Submission.get(thing=submission.id)
 
-        return sorted(submissions, key=lambda item: item["time"])
+                sub.flair = flair
+                if sub.state == Submission.STATE_INITIAL:
+                    sub.state = Submission.STATE_CHECKED
+            except DoesNotExist:
+                sub = Submission(
+                    thing=submission.id,
+                    subreddit=self.subreddit_name,
+                    title=submission.title,
+                    author=submission.author.name,
+                    time=submission.created_utc,
+                    flair=flair,
+                    url=submission.permalink,
+                    thumbnail=thumbnail,
+                    is_daily=self.is_daily(submission)
+                )
+
+            sub.save()
 
     def is_daily(self, submission):
         return submission.author.name == "AutoModerator" and self.subreddit_name == "newzealand" and \
-            submission.link_flair_text == "Discussion"
+            submission.link_flair_text == "Discussion" and "Random Daily Discussion" in submission.title
