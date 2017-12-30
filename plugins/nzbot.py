@@ -244,7 +244,7 @@ class RNZBot:
 
     def get_submissions(self):
         missing_thumbnail = [
-            "self", "default", ""
+            "self", "default", "spoiler", ""
         ]
 
         subreddit = self.client.subreddit(self.subreddit_name)
