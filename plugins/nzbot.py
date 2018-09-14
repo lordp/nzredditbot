@@ -71,6 +71,9 @@ class RNZBotConfig(Config):
         "ama": "0099CC",
         "kiwiana": "78A22F",
         "shitpost": "D4327C",
+        "opinion": "FFB3BF",
+        "longform": "53C68C",
+        "Māoritanga": "EA0027"
     }
 
     default_flair_colour = "c2c2cf"
