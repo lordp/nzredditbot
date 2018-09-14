@@ -1,4 +1,5 @@
 import praw
+from prawcore.exceptions import ResponseException
 from datetime import datetime, timezone
 from disco.bot import Plugin, Config
 from disco.types.message import MessageEmbed
@@ -148,7 +149,7 @@ class RNZBotPlugin(Plugin):
     def post_threads(self, subreddit, channel):
         if channel is not None:
             self.log.info("Checking submissions for {}".format(subreddit))
-            RNZBot(subreddit).get_submissions()
+            RNZBot(subreddit, self.log).get_submissions()
             if self.config.channels[subreddit]['state'] == 0:
                 self.config.channels[subreddit]['state'] = 1
             else:
@@ -217,9 +218,10 @@ class RNZBotPlugin(Plugin):
 
 
 class RNZBot:
-    def __init__(self, subreddit):
+    def __init__(self, subreddit, log):
         self.client = praw.Reddit("r-nz")
         self.subreddit_name = subreddit
+        self.log = log
 
         self.posted = []
         self.load_posted()
@@ -248,34 +250,37 @@ class RNZBot:
         ]
 
         subreddit = self.client.subreddit(self.subreddit_name)
-        for submission in subreddit.new(limit=10):
-            if submission.thumbnail in missing_thumbnail:
-                thumbnail = self.sub_thumbnail
-            else:
-                thumbnail = submission.thumbnail
+        try:
+            for submission in subreddit.new(limit=10):
+                if submission.thumbnail in missing_thumbnail:
+                    thumbnail = self.sub_thumbnail
+                else:
+                    thumbnail = submission.thumbnail
 
-            flair = "Other" if submission.link_flair_text is None else submission.link_flair_text
+                flair = "Other" if submission.link_flair_text is None else submission.link_flair_text
 
-            try:
-                sub = Submission.get(thing=submission.id)
+                try:
+                    sub = Submission.get(thing=submission.id)
 
-                sub.flair = flair
-                if sub.state == Submission.STATE_INITIAL:
-                    sub.state = Submission.STATE_CHECKED
-            except DoesNotExist:
-                sub = Submission(
-                    thing=submission.id,
-                    subreddit=self.subreddit_name,
-                    title=submission.title,
-                    author=submission.author.name,
-                    time=submission.created_utc,
-                    flair=flair,
-                    url=submission.permalink,
-                    thumbnail=thumbnail,
-                    is_daily=self.is_daily(submission)
-                )
+                    sub.flair = flair
+                    if sub.state == Submission.STATE_INITIAL:
+                        sub.state = Submission.STATE_CHECKED
+                except DoesNotExist:
+                    sub = Submission(
+                        thing=submission.id,
+                        subreddit=self.subreddit_name,
+                        title=submission.title,
+                        author=submission.author.name,
+                        time=submission.created_utc,
+                        flair=flair,
+                        url=submission.permalink,
+                        thumbnail=thumbnail,
+                        is_daily=self.is_daily(submission)
+                    )
 
-            sub.save()
+                sub.save()
+        except ResponseException:
+            self.log.info('ResponseException from Reddit')
 
     def is_daily(self, submission):
         return submission.author.name == "AutoModerator" and self.subreddit_name == "newzealand" and \
