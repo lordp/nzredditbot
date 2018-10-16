@@ -6,6 +6,8 @@ from peewee import *
 import time
 import requests
 import json
+from terminaltables import AsciiTable
+import sys
 
 db = SqliteDatabase("nzredditbot.db")
 db.connect()
@@ -33,7 +35,7 @@ class Submission(Model):
 
 
 class RNZBot:
-    def __init__(self, subreddit):
+    def __init__(self, subreddit, post_stats=False):
         self.client = praw.Reddit("r-nz")
         self.subreddit_name = subreddit
 
@@ -69,8 +71,18 @@ class RNZBot:
         self.reset = 0
         self.remaining = 0
 
+        self.author_stats = "select author, count(*) as cnt " \
+                            "from submission " \
+                            "where time > strftime('%s', 'now', '-7 days') " \
+                            "and author != 'AutoModerator' " \
+                            "group by author " \
+                            "order by cnt desc " \
+                            "limit 5"
+
         self.get_submissions()
         self.post_submissions()
+        if post_stats:
+            self.post_stats()
 
     def get_submissions(self):
         missing_thumbnail = [
@@ -151,6 +163,33 @@ class RNZBot:
 
         return embed
 
+    def post_stats(self):
+        data = [
+            ['Author', 'Count'],
+        ]
+
+        stats = db.execute_sql(self.author_stats)
+        for row in stats.fetchall():
+            data.append([row[0], row[1]])
+
+        table_instance = AsciiTable(data)
+        table_instance.inner_column_border = False
+        table_instance.outer_border = False
+        table_instance.justify_columns[1] = 'center'
+
+        content = {'content': "```{}```".format(table_instance.table)}
+
+        full_url = self.url + self.hook_id + '/' + self.hook_token + '?wait=true'
+        r = requests.post(full_url, json=content)
+        self.limit = int(r.headers['X-RateLimit-Limit'])
+        self.remaining = int(r.headers['X-RateLimit-Remaining'])
+        self.reset = int(r.headers['X-RateLimit-Reset'])
+
 
 if __name__ == '__main__':
-    bot = RNZBot('newzealand')
+    try:
+        post_stats = sys.argv[1] == 'post_stats'
+    except IndexError:
+        post_stats = False
+
+    bot = RNZBot('newzealand', post_stats)
