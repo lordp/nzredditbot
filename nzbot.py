@@ -137,8 +137,7 @@ class RNZBot:
                 time.sleep(5)
 
     def get_embed(self, info):
-        flair = info.flair.replace('ā', 'a').lower()
-        colour = int(self.flair_colours.get(flair, self.default_flair_colour), 16)
+        colour = int(self.flair_colours.get(info.flair.lower(), self.default_flair_colour), 16)
 
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
