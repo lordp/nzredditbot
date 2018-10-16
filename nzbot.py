@@ -56,7 +56,7 @@ class RNZBot:
             "shitpost": "D4327C",
             "opinion": "FFB3BF",
             "longform": "53C68C",
-            "maoritanga": "EA0027"
+            "māoritanga": "EA0027"
         }
 
         self.default_flair_colour = "c2c2cf"
@@ -137,7 +137,8 @@ class RNZBot:
                 time.sleep(5)
 
     def get_embed(self, info):
-        colour = int(self.flair_colours.get(info.flair.lower(), self.default_flair_colour), 16)
+        flair = info.flair.replace('ā', 'a').lower()
+        colour = int(self.flair_colours.get(flair, self.default_flair_colour), 16)
 
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
