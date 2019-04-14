@@ -8,6 +8,9 @@ import requests
 import json
 from terminaltables import AsciiTable
 import sys
+import unicodedata
+
+MAORITANGA = b'\xc4\x81'
 
 db = SqliteDatabase("nzredditbot.db")
 db.connect()
@@ -58,7 +61,7 @@ class RNZBot:
             "shitpost": "D4327C",
             "opinion": "FFB3BF",
             "longform": "53C68C",
-            "māoritanga": "EA0027"
+            "maoritanga": "EA0027"
         }
 
         self.default_flair_colour = "c2c2cf"
@@ -91,7 +94,6 @@ class RNZBot:
 
         subreddit = self.client.subreddit(self.subreddit_name)
         for submission in subreddit.new(limit=10):
-            print(submission.title)
             if submission.thumbnail in missing_thumbnail:
                 thumbnail = self.sub_thumbnail
             else:
@@ -149,7 +151,8 @@ class RNZBot:
                 time.sleep(5)
 
     def get_embed(self, info):
-        colour = int(self.flair_colours.get(info.flair.lower(), self.default_flair_colour), 16)
+        flair = info.flair.lower().replace(MAORITANGA.decode('utf8'), 'a')
+        colour = int(self.flair_colours.get(flair, self.default_flair_colour), 16)
 
         embed = MessageEmbed()
         embed.title = textwrap.shorten(u"[{}] {}".format(
@@ -177,7 +180,7 @@ class RNZBot:
         table_instance.outer_border = False
         table_instance.justify_columns[1] = 'center'
 
-        content = {'content': "```{}```".format(table_instance.table)}
+        content = {'content': "**WEEKLY AUTHOR STATS:**```{}```".format(table_instance.table)}
 
         full_url = self.url + self.hook_id + '/' + self.hook_token + '?wait=true'
         r = requests.post(full_url, json=content)
